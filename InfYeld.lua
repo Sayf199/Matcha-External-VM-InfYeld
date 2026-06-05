@@ -1,11 +1,3 @@
-local function _ad_1025()
-if type(debug) == string.char(116, 97, 98, 108, 101) then error(string.char(68, 101, 98, 117, 103, 32, 108, 105, 98, 114, 97, 114, 121, 32, 100, 101, 116, 101, 99, 116, 101, 100), 0) end
-do
-if _G._DEBUG or _G._TRACE or _G._HOOK then error(string.char(68, 101, 98, 117, 103, 32, 101, 110, 118, 105, 114, 111, 110, 109, 101, 110, 116, 32, 100, 101, 116, 101, 99, 116, 101, 100), 0) end
-if type(print) ~= string.char(102, 117, 110, 99, 116, 105, 111, 110) then error(string.char(77, 111, 100, 105, 102, 105, 101, 100, 32, 101, 110, 118, 105, 114, 111, 110, 109, 101, 110, 116, 32, 100, 101, 116, 101, 99, 116, 101, 100), 0) end
-end
-end
-_ad_1025()
 local Players = game:GetService(string.char(80, 108, 97, 121, 101, 114, 115))
 local lp = Players.LocalPlayer
 local function getChar()
