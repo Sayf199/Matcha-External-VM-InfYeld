@@ -912,7 +912,7 @@ local pTitlePfx = mkTxt(">>", 0,0, 90,190,255, 13, 33)
 local pTitleLbl = mkTxt("IY Matcha", 0,0, 240,240,255, 14, 33)
 -- Badge version
 local pVerBg    = mkSq(0,0,48,18, 40,90,200, 0, 33)
-local pVerTxt   = mkTxt("v1.0", 0,0, 170,215,255, 11, 34)
+local pVerTxt   = mkTxt("v1.1", 0,0, 170,215,255, 11, 34)
 -- Header/list separator
 local pHdrSep   = mkSq(0,0,0,0,  50,120,230, 0, 32)
 -- List area
