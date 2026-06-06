@@ -42,7 +42,16 @@ local antiAFKThread = nil
 local autoclickEnabled = false
 local autoclickThread = nil
 local waypoints = {}   
-local wpMarkers = {}       
+local wpMarkers = {}   
+local orbitEnabled  = false
+local orbitConn     = nil
+local orbitTarget   = nil
+local tpwalkEnabled = false
+local tpwalkConn    = nil
+local tpwalkTarget  = nil
+local bringEnabled = false
+local bringConn    = nil
+local bringTarget  = nil
 
 -- Commands
 local commands = {}
@@ -64,23 +73,40 @@ local function humWrite(offset, val)
 end
 
 -- SPEED
-local speedValue = 16
+local speedValue = 0
 local speedConn  = nil
-commands["speed"] = function(args)
+commands["walkspeed"] = function(args)
     local val = tonumber(args[1])
-    if not val then sendNotify("Usage: speed [val]") return end
-    speedValue = val
+    if not val then sendNotify("Usage: walkspeed [val]") return end
     if speedConn then speedConn:Disconnect(); speedConn = nil end
+    if val == 0 or val == 16 then
+        speedValue = 0
+        sendNotify("walkspeed reset")
+        return
+    end
+    speedValue = val
+    sendNotify("walkspeed -> " .. val)
     local RS = game:GetService("RunService")
     speedConn = RS.Heartbeat:Connect(function()
-        local hum = getHumanoid()
-        if hum then
-            -- Essayer les deux méthodes
-            pcall(function() hum.WalkSpeed = speedValue end)
-            humWrite(HUM_WALKSPEED, speedValue)
+        local root = getRootPart()
+        if not root then return end
+        -- Lire la direction des touches WASD
+        local cf  = root.CFrame
+        local dir = Vector3.new(0, 0, 0)
+        if iskeypressed(0x5A) then dir = dir + cf.LookVector  end 
+        if iskeypressed(0x53) then dir = dir - cf.LookVector  end 
+        if iskeypressed(0x51) then dir = dir - cf.RightVector end 
+        if iskeypressed(0x44) then dir = dir + cf.RightVector end 
+        if dir.Magnitude > 0 then
+            dir = dir.Unit
+            local vel = root.AssemblyLinearVelocity
+            root.AssemblyLinearVelocity = Vector3.new(
+                dir.X * speedValue,
+                vel.Y,
+                dir.Z * speedValue
+            )
         end
     end)
-    sendNotify("Speed -> " .. val)
 end
 
 -- JUMP
@@ -112,15 +138,15 @@ commands["ungod"] = function()
     if godConnection then
         godConnection:Disconnect()
         godConnection = nil
-        sendNotify("Mode Dieu désactivé")
+        sendNotify("God mode disabled")
     end
 end
 
 -- FLY
 commands["fly"] = function()
-    if flyEnabled then sendNotify("Fly déjà actif !") return end
+    if flyEnabled then sendNotify("Fly already active!") return end
     flyEnabled = true
-    sendNotify("Fly activé ✓")
+    sendNotify("Fly activated")
 
     flyThread = task.spawn(function()
         local SPEED = 50
@@ -158,10 +184,10 @@ commands["fly"] = function()
     end)
 end
 
--- UNFLY
-commands["unfly"] = function()
+-- NOFLY
+commands["nofly"] = function()
     flyEnabled = false
-    sendNotify("Fly désactivé")
+    sendNotify("Fly disabled")
 end
 
 -- NOCLIP
@@ -245,23 +271,45 @@ commands["tp"] = function(args)
 end
 
 -- BRING
+local bringEnabled = false
+local bringConn    = nil
+local bringTarget  = nil
 commands["bring"] = function(args)
     local name = args[1]
-    if not name then sendNotify("Usage: ;bring [player]") return end
+    if not name then sendNotify("Usage: bring [player]") return end
     local target = findPlayer(name)
     if not target then sendNotify("Player not found: " .. name) return end
-    local targetChar = target.Character
-    local root = getRootPart()
-    if targetChar and root then
-        local targetRoot = targetChar:FindFirstChild("HumanoidRootPart")
-        if targetRoot then
-            targetRoot.CFrame = CFrame.new(root.Position.X + 3, root.Position.Y, root.Position.Z)
-            sendNotify("Brought " .. target.Name)
-        end
-    end
+
+    -- Stop previous bring
+    if bringConn then bringConn:Disconnect(); bringConn = nil end
+
+    bringTarget  = target
+    bringEnabled = true
+    sendNotify("Bringing " .. target.Name .. " (nobring to stop)")
+
+    local RS = game:GetService("RunService")
+    bringConn = RS.Heartbeat:Connect(function()
+        if not bringEnabled then return end
+        local root = getRootPart()
+        local tc   = bringTarget and bringTarget.Character
+        if not root or not tc then return end
+        local tr = tc:FindFirstChild("HumanoidRootPart")
+        if not tr then return end
+        tr.CFrame = CFrame.new(
+            root.Position.X + 3,
+            root.Position.Y,
+            root.Position.Z
+        )
+    end)
 end
 
-
+-- NOBRING
+commands["nobring"] = function()
+    bringEnabled = false
+    if bringConn then bringConn:Disconnect(); bringConn = nil end
+    bringTarget = nil
+    sendNotify("Bring OFF")
+end
 
 -- NOTIFY
 commands["notify"] = function(args)
@@ -299,7 +347,7 @@ end
 
 -- WS 
 commands["ws"] = function(args)
-    commands["speed"](args)
+    commands["walkspeed"](args)
 end
 
 -- JH 
@@ -423,7 +471,7 @@ commands["noantifling"] = function()
     sendNotify("AntiFling OFF")
 end
 
--- LOOPTP / STOPLOOPTP
+-- LOOPTP 
 local looptpEnabled = false
 local looptpThread  = nil
 commands["looptp"] = function(args)
@@ -436,7 +484,7 @@ commands["looptp"] = function(args)
         task.wait(0.1)
     end
     looptpEnabled = true
-    sendNotify("LoopTP -> " .. target.Name .. " (stoplooptp to stop)")
+    sendNotify("looptp -> " .. target.Name .. " (nolooptp to stop)")
     looptpThread = task.spawn(function()
         while looptpEnabled do
             local root = getRootPart()
@@ -452,7 +500,8 @@ commands["looptp"] = function(args)
     end)
 end
 
-commands["stoplooptp"] = function()
+-- NOLOOPTP
+commands["nolooptp"] = function()
     looptpEnabled = false
     sendNotify("LoopTP stopped")
 end
@@ -506,6 +555,96 @@ commands["wp"] = function()
     end
 end
 
+-- TPWALK 
+local tpwalkEnabled = false
+local tpwalkConn    = nil
+local tpwalkTarget  = nil
+commands["tpwalk"] = function(args)
+    local name = args[1]
+    if not name then sendNotify("Usage: tpwalk [player]") return end
+    local target = findPlayer(name)
+    if not target then sendNotify("Player not found: " .. name) return end
+    if tpwalkEnabled then
+        tpwalkEnabled = false
+        if tpwalkConn then tpwalkConn:Disconnect(); tpwalkConn = nil end
+    end
+    tpwalkTarget  = target
+    tpwalkEnabled = true
+    sendNotify("TpWalk -> " .. target.Name .. " (notpwalk to stop)")
+    local RS = game:GetService("RunService")
+    tpwalkConn = RS.Heartbeat:Connect(function()
+        if not tpwalkEnabled then return end
+        local tc = tpwalkTarget and tpwalkTarget.Character
+        if not tc then return end
+        local tr = tc:FindFirstChild("HumanoidRootPart")
+        local myRoot = getRootPart()
+        if not tr or not myRoot then return end
+        local dist = (myRoot.Position - tr.Position).Magnitude
+        -- Seulement tp si on est à plus de 4 studs pour rester fluide
+        if dist > 4 then
+            local dir = (tr.Position - myRoot.Position).Unit
+            myRoot.CFrame = CFrame.new(
+                myRoot.Position.X + dir.X * 3,
+                tr.Position.Y + 1,
+                myRoot.Position.Z + dir.Z * 3
+            )
+        end
+    end)
+end
+
+-- NOTPWALK
+commands["notpwalk"] = function()
+    tpwalkEnabled = false
+    if tpwalkConn then tpwalkConn:Disconnect(); tpwalkConn = nil end
+    tpwalkTarget = nil
+    sendNotify("TpWalk OFF")
+end
+
+-- ORBIT 
+local orbitEnabled = false
+local orbitConn    = nil
+local orbitTarget  = nil
+commands["orbit"] = function(args)
+    local name = args[1]
+    if not name then sendNotify("Usage: orbit [player]") return end
+    local target = findPlayer(name)
+    if not target then sendNotify("Player not found: " .. name) return end
+    if orbitEnabled then
+        orbitEnabled = false
+        if orbitConn then orbitConn:Disconnect(); orbitConn = nil end
+    end
+    orbitTarget  = target
+    orbitEnabled = true
+    sendNotify("Orbit -> " .. target.Name .. " (noorbit to stop)")
+    local RS    = game:GetService("RunService")
+    local angle = 0
+    local radius = 8
+    orbitConn = RS.Heartbeat:Connect(function()
+        if not orbitEnabled then return end
+        local tc = orbitTarget and orbitTarget.Character
+        if not tc then return end
+        local tr = tc:FindFirstChild("HumanoidRootPart")
+        local myRoot = getRootPart()
+        if not tr or not myRoot then return end
+        angle = (angle + 12) % 360
+        local rad = math.rad(angle)
+        local tx, ty, tz = tr.Position.X, tr.Position.Y, tr.Position.Z
+        myRoot.CFrame = CFrame.new(
+            tx + math.cos(rad) * radius,
+            ty + 1,
+            tz + math.sin(rad) * radius
+        )
+    end)
+end
+
+-- NOORBIT
+commands["noorbit"] = function()
+    orbitEnabled = false
+    if orbitConn then orbitConn:Disconnect(); orbitConn = nil end
+    orbitTarget = nil
+    sendNotify("Orbit OFF")
+end
+
 -- SPIN 
 local spinEnabled = false
 local spinConn    = nil
@@ -547,7 +686,7 @@ commands["unspin"] = function()
     sendNotify("Spin OFF")
 end
 
--- INF JUMP
+-- INFJUMP
 local infJumpEnabled = false
 local infJumpConn    = nil
 commands["infjump"] = function()
@@ -574,6 +713,7 @@ commands["infjump"] = function()
     end)
 end
 
+-- NOINFJUMP
 commands["noinfjump"] = function()
     infJumpEnabled = false
     if infJumpConn then infJumpConn:Disconnect(); infJumpConn = nil end
@@ -601,6 +741,7 @@ commands["antiafk"] = function()
     end)
 end
 
+-- NOANTIAFK
 commands["noantiafk"] = function()
     if not antiAFKEnabled then
         sendNotify("Anti-AFK not active")
@@ -634,29 +775,34 @@ commands["autoclick"] = function(args)
 end
 
 local commandOrder = {
-    { name="speed (ws)",  desc="Change walkspeed [val]" },
+    { name="walkspeed(ws)",desc="Change walkspeed [val]" },
     { name="jump  (jh)",  desc="Change jump power [val]" },
     { name="fly",         desc="Fly (WASD+Space/Shift)" },
-    { name="unfly",       desc="Stop flying" },
+    { name="nofly",       desc="Stop flying" },
     { name="noclip",      desc="Walk through walls" },
     { name="clip",        desc="Re-enable collisions" },
-    { name="god",         desc="God mode ON" },
-    { name="ungod",       desc="God mode OFF" },
     { name="infjump",     desc="Infinite jump (hold Space)" },
 	{ name="noinfjump",   desc="Disable infinite jump" },
-    { name="spin",        desc="Spin your character [speed]" },
-    { name="unspin",      desc="Stop spinning" },
     { name="fling",       desc="Fling a player" },
     { name="antifling",   desc="Anti-fling protection" },
     { name="noantifling", desc="Disable anti-fling" },
 	{ name="tp",          desc="Teleport to player [name or random]" },
     { name="looptp",      desc="Loop teleport to player" },
-    { name="stoplooptp",  desc="Stop loop teleport" },
+    { name="nolooptp",    desc="Stop loop teleport" },
+	{ name="tpwalk",      desc="Smoothly follow a player" },
+    { name="notpwalk",    desc="Stop following" },
 	{ name="addwp",       desc="Add a waypoint [name]" },
     { name="delwp",       desc="Delete waypoint [name]" },
     { name="tpwp",        desc="Teleport to waypoint [name]" },
     { name="wp",          desc="Show/hide the list of waypoints" },
     { name="bring",       desc="Bring a player" },
+	{ name="nobring",     desc="Stop bringing" },
+	{ name="orbit",       desc="Orbit around a player" },
+    { name="noorbit",     desc="Stop orbiting" },
+	{ name="spin",        desc="Spin your character [speed]" },
+    { name="unspin",      desc="Stop spinning" },
+	{ name="god",         desc="God mode ON" },
+    { name="ungod",       desc="God mode OFF" },
 	{ name="antiafk",     desc="Avoid the inactivity kick" },
     { name="noantiafk",   desc="Disable AFK protection" },
 	{ name="autoclick",   desc="Automatic click [delay=0.05]" },
@@ -664,7 +810,7 @@ local commandOrder = {
     { name="coords",      desc="Show coordinates" },
     { name="time",        desc="Server time" },
     { name="notify",      desc="Send a notification" },
-    { name="game",        desc="Current game name" },
+    { name="gameid",      desc="Current game id" },
 }
 
 -- F6 command
@@ -1125,7 +1271,7 @@ end)
 -- scroll up down 
 task.spawn(function()
     while true do
-        task.wait(0.04)
+        task.wait(0.016)
         scrollCD = math.max(0, scrollCD - 0.04)
 
         local mx = mouse.X
@@ -1220,6 +1366,11 @@ task.spawn(function()
             barText.Visible   = true
             helpLabel.Visible = false
             barText.Text      = "> _"
+            setrobloxinput(false)
+        end
+
+        -- Keep Robloxinput blocked while typing
+        if isTyping then
             setrobloxinput(false)
         end
 
